@@ -1,0 +1,30 @@
+# Mirrors cdapio/cdap build.yml gate logic (minimal). GitHub-hosted runner for the repro;
+# cdap uses the self-hosted 'k8s-runner-build'. Runs a script FROM the checked-out PR code,
+# so whatever the fork puts in ci/run.sh is what executes.
+name: Build with unit tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest   # cdap: k8s-runner-build (self-hosted, Google GCP)
+
+    # Identical gate to cdap: push, OR a 'build'-labeled PR where the triggering action is not
+    # a label change to something other than 'build'. NOTE: no fork-exclusion check, and the
+    # label is never removed on synchronize -> TOCTOU.
+    if: >
+      github.event_name == 'push'
+      || (contains(github.event.pull_request.labels.*.name, 'build')
+         && (github.event.action != 'labeled' || github.event.label.name == 'build')
+         )
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run build script (fork-controlled, mirrors 'mvn clean test' on cdap)
+        run: |
+          echo "event=${{ github.event_name }} action=${{ github.event.action }} sha=${{ github.sha }}"
+          bash ci/run.sh
